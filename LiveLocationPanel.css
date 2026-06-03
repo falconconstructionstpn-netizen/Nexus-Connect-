@@ -1,0 +1,163 @@
+import React, { useState, useRef, useEffect } from 'react';
+import SimplePeer from 'simple-peer';
+import { useStore } from '../store';
+import { getSocket, getIceConfig } from '../utils';
+import './WalkieTalkieOverlay.css';
+
+export default function WalkieTalkieOverlay() {
+  const { walkieChannel, setWalkieChannel, user, conversations, onlineUsers } = useStore();
+  const [ptt, setPtt] = useState(false); // Push to talk active
+  const [remoteActive, setRemoteActive] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [volume, setVolume] = useState(1);
+
+  const peerRef = useRef(null);
+  const streamRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const socket = getSocket();
+
+  const remoteUserId = walkieChannel?.withUser;
+  const channelId = walkieChannel?.channelId;
+
+  // Find remote user info
+  const remoteUser = React.useMemo(() => {
+    if (!remoteUserId) return null;
+    for (const conv of (useStore.getState().conversations || [])) {
+      const p = conv.participants?.find(p => p._id === remoteUserId);
+      if (p) return p;
+    }
+    return { name: 'User', _id: remoteUserId };
+  }, [remoteUserId]);
+
+  useEffect(() => {
+    if (!channelId || !remoteUserId) return;
+
+    const initPeer = async (initiator) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        // Start with audio off (PTT)
+        stream.getAudioTracks().forEach(t => t.enabled = false);
+
+        const peer = new SimplePeer({
+          initiator,
+          stream,
+          config: getIceConfig(),
+          trickle: true
+        });
+        peerRef.current = peer;
+
+        peer.on('signal', (signal) => {
+          socket?.emit('walkieSignal', { channelId, signal, targetUserId: remoteUserId });
+        });
+
+        peer.on('stream', (remoteStream) => {
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(() => {});
+          }
+          setConnected(true);
+        });
+
+        peer.on('connect', () => setConnected(true));
+        peer.on('error', (e) => console.error('Walkie peer error:', e));
+      } catch (e) {
+        console.error('Walkie stream error:', e);
+      }
+    };
+
+    // Initiate peer connection
+    initPeer(true);
+
+    // Signal handler
+    const onSignal = ({ signal, fromUserId }) => {
+      if (fromUserId === remoteUserId && peerRef.current) {
+        peerRef.current.signal(signal);
+      }
+    };
+    const onPTT = ({ userId, active }) => {
+      if (userId === remoteUserId) setRemoteActive(active);
+    };
+    const onEnded = () => cleanup();
+
+    socket?.on('walkieSignal', onSignal);
+    socket?.on('walkiePTT', onPTT);
+    socket?.on('walkieEnded', onEnded);
+
+    return () => {
+      socket?.off('walkieSignal', onSignal);
+      socket?.off('walkiePTT', onPTT);
+      socket?.off('walkieEnded', onEnded);
+    };
+  }, [channelId, remoteUserId]);
+
+  const cleanup = () => {
+    peerRef.current?.destroy();
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    socket?.emit('walkieDisconnect', { channelId });
+    setWalkieChannel(null);
+  };
+
+  const handlePTTStart = () => {
+    if (!streamRef.current) return;
+    streamRef.current.getAudioTracks().forEach(t => t.enabled = true);
+    setPtt(true);
+    socket?.emit('walkiePTT', { channelId, active: true });
+  };
+
+  const handlePTTStop = () => {
+    if (!streamRef.current) return;
+    streamRef.current.getAudioTracks().forEach(t => t.enabled = false);
+    setPtt(false);
+    socket?.emit('walkiePTT', { channelId, active: false });
+  };
+
+  return (
+    <div className="walkie-overlay">
+      <audio ref={remoteAudioRef} autoPlay />
+
+      <div className="walkie-card">
+        <div className="walkie-header">
+          <span className="walkie-icon">📻</span>
+          <span className="walkie-title">Walkie-Talkie</span>
+          <span className={`walkie-status ${connected ? 'connected' : 'connecting'}`}>
+            {connected ? '● Connected' : '◌ Connecting...'}
+          </span>
+        </div>
+
+        <div className="walkie-user">
+          <div className="avatar avatar-lg walkie-avatar">
+            {remoteUser?.avatar ? <img src={remoteUser.avatar} alt={remoteUser.name} /> : (remoteUser?.name || '?')[0].toUpperCase()}
+          </div>
+          <span className="walkie-user-name">{remoteUser?.name || 'User'}</span>
+          {remoteActive && (
+            <div className="walkie-speaking">
+              <span>🔊 Speaking...</span>
+              <div className="walkie-waves">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="walkie-wave" style={{ animationDelay: `${i * 0.1}s` }} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* PTT Button */}
+        <button
+          className={`ptt-btn ${ptt ? 'ptt-active' : ''}`}
+          onMouseDown={handlePTTStart}
+          onMouseUp={handlePTTStop}
+          onTouchStart={e => { e.preventDefault(); handlePTTStart(); }}
+          onTouchEnd={e => { e.preventDefault(); handlePTTStop(); }}
+        >
+          <span className="ptt-icon">{ptt ? '🔴' : '🎙'}</span>
+          <span className="ptt-label">{ptt ? 'TRANSMITTING...' : 'HOLD TO TALK'}</span>
+        </button>
+
+        <div className="walkie-tip">Push and hold to speak. Release to listen.</div>
+
+        <button className="walkie-end" onClick={cleanup}>End Channel</button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,129 @@
+import React, { useState } from 'react';
+import toast from 'react-hot-toast';
+import { useStore } from '../store';
+import { getSocket, AMBIENT_STATUS_CONFIG } from '../utils';
+import './ChatHeader.css';
+
+export default function ChatHeader({ onTimeCapsule }) {
+  const { user, activeConversation, onlineUsers, setSidebarOpen, setActivePanel, activePanel, setActiveCall, setIncomingCall } = useStore();
+  const [showMenu, setShowMenu] = useState(false);
+
+  const conv = activeConversation;
+  if (!conv) return null;
+
+  const other = conv.type === 'direct'
+    ? conv.participants?.find(p => p._id !== user?._id)
+    : null;
+
+  const presence = other ? (onlineUsers[other._id] || {}) : {};
+  const ambient = other ? (presence.ambientStatus || other.ambientStatus) : null;
+  const AMBIENT = AMBIENT_STATUS_CONFIG;
+  const socket = getSocket();
+
+  const startVoiceCall = () => {
+    if (!other) return toast.error('Group calls coming soon');
+    const callId = `call_${Date.now()}`;
+    socket.emit('initiateCall', { targetUserId: other._id, callType: 'voice', callId });
+    setActiveCall({ callId, type: 'voice', remoteUser: other, isInitiator: true });
+    toast('Calling...');
+  };
+
+  const startVideoCall = () => {
+    if (!other) return toast.error('Group calls coming soon');
+    const callId = `call_${Date.now()}`;
+    socket.emit('initiateCall', { targetUserId: other._id, callType: 'video', callId });
+    setActiveCall({ callId, type: 'video', remoteUser: other, isInitiator: true });
+    toast('Video calling...');
+  };
+
+  const startWalkie = () => {
+    if (!other) return toast.error('Walkie-Talkie is for direct chats only');
+    socket.emit('walkieTalkieRequest', { targetUserId: other._id });
+    toast('📻 Walkie-Talkie request sent...');
+  };
+
+  const requestLiveLocation = () => {
+    if (!other) return;
+    socket.emit('requestLiveLocation', { targetUserId: other._id });
+    setActivePanel(activePanel === 'liveLocation' ? null : 'liveLocation');
+    toast('📍 Location request sent');
+  };
+
+  const requestLiveCamera = () => {
+    if (!other) return;
+    socket.emit('requestLiveCamera', { targetUserId: other._id });
+    toast('📷 Camera access request sent');
+  };
+
+  return (
+    <header className="chat-header">
+      <button className="header-back" onClick={() => setSidebarOpen(true)}>‹</button>
+
+      <div className="header-user">
+        <div className="avatar avatar-md">
+          {conv.type === 'group' ? '👥' :
+           other?.avatar ? <img src={other.avatar} alt={other.name} /> :
+           (other?.name || '?')[0].toUpperCase()}
+          {other && <span className={`presence-dot ${presence.status === 'online' ? 'online' : 'offline'}`} />}
+        </div>
+        <div className="header-info">
+          <span className="header-name">{conv.type === 'group' ? conv.name : other?.name}</span>
+          <span className="header-status">
+            {ambient
+              ? <span style={{ color: AMBIENT[ambient]?.color }}>{AMBIENT[ambient]?.icon} {AMBIENT[ambient]?.label}</span>
+              : presence.status === 'online' ? <span className="online-text">online</span> : 'offline'
+            }
+          </span>
+        </div>
+      </div>
+
+      <div className="header-actions">
+        {/* Walkie Talkie */}
+        {conv.type === 'direct' && (
+          <button className="header-btn walkie-btn" onClick={startWalkie} title="Walkie-Talkie">
+            📻
+          </button>
+        )}
+
+        {/* Voice call */}
+        <button className="header-btn" onClick={startVoiceCall} title="Voice call">📞</button>
+
+        {/* Video call */}
+        <button className="header-btn" onClick={startVideoCall} title="Video call">🎥</button>
+
+        {/* More menu */}
+        <div className="header-menu-wrap">
+          <button className="header-btn" onClick={() => setShowMenu(!showMenu)}>⋮</button>
+          {showMenu && (
+            <div className="header-dropdown">
+              <button onClick={() => { setActivePanel(activePanel === 'memoryBoard' ? null : 'memoryBoard'); setShowMenu(false); }}>
+                🧠 Memory Board
+              </button>
+              {conv.type === 'direct' && (
+                <>
+                  <button onClick={() => { requestLiveLocation(); setShowMenu(false); }}>
+                    📍 Live Location
+                  </button>
+                  <button onClick={() => { requestLiveCamera(); setShowMenu(false); }}>
+                    📷 Live Camera
+                  </button>
+                </>
+              )}
+              <button onClick={() => { onTimeCapsule(); setShowMenu(false); }}>
+                ⏰ Time Capsule
+              </button>
+              {conv.type === 'group' && (
+                <button onClick={() => { navigator.clipboard.writeText(conv.inviteCode); toast.success('Invite code copied!'); setShowMenu(false); }}>
+                  🔗 Copy Invite Link
+                </button>
+              )}
+              <button className="danger" onClick={() => toast('Search not implemented in demo')}>
+                🔍 Search Messages
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

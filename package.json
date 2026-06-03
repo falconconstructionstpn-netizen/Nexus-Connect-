@@ -1,34 +1,133 @@
-{
-  "name": "nexus-app",
-  "version": "1.0.0",
-  "description": "Nexus - Next-gen messaging platform",
-  "scripts": {
-    "start": "node server/index.js",
-    "dev": "nodemon server/index.js",
-    "build": "bash build.sh",
-    "install-all": "npm install && cd client && npm install"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "mongoose": "^8.0.3",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "multer": "^1.4.5-lts.1",
-    "cloudinary": "^1.41.3",
-    "nodemailer": "^6.9.7",
-    "uuid": "^9.0.1",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "compression": "^1.7.4",
-    "node-cron": "^3.0.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0A0A0F;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-bg { position: absolute; inset: 0; pointer-events: none; }
+.auth-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  animation: pulse 4s ease-in-out infinite;
+}
+.auth-orb-1 { width: 400px; height: 400px; background: #00F5FF; top: -100px; left: -100px; animation-delay: 0s; }
+.auth-orb-2 { width: 300px; height: 300px; background: #7C3AED; bottom: -50px; right: -50px; animation-delay: 1.5s; }
+.auth-orb-3 { width: 200px; height: 200px; background: #F59E0B; bottom: 100px; left: 50%; animation-delay: 3s; }
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  background: rgba(17, 17, 24, 0.9);
+  border: 1px solid rgba(0,245,255,0.15);
+  border-radius: 24px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+}
+
+.auth-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.auth-logo-icon {
+  font-size: 32px;
+  color: #00F5FF;
+  line-height: 1;
+}
+.auth-logo-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #00F5FF;
+}
+.auth-tagline {
+  color: rgba(240,240,255,0.4);
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 9px;
+  background: none;
+  color: rgba(240,240,255,0.5);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.auth-tab.active {
+  background: rgba(0,245,255,0.12);
+  color: #00F5FF;
+  border: 1px solid rgba(0,245,255,0.2);
+}
+
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field label { font-size: 12px; font-weight: 600; color: rgba(240,240,255,0.5); letter-spacing: 0.5px; text-transform: uppercase; }
+.auth-field input {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #F0F0FF;
+  font-size: 15px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.auth-field input:focus {
+  border-color: rgba(0,245,255,0.4);
+  background: rgba(0,245,255,0.04);
+  box-shadow: 0 0 0 3px rgba(0,245,255,0.08);
+}
+.auth-field input::placeholder { color: rgba(240,240,255,0.2); }
+
+.auth-btn {
+  margin-top: 8px;
+  padding: 14px;
+  background: linear-gradient(135deg, #00F5FF, #7C3AED);
+  color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+}
+.auth-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,245,255,0.2); }
+.auth-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.auth-spinner {
+  width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }

@@ -1,0 +1,71 @@
+import React, { useEffect, useRef } from 'react';
+import { useStore } from '../store';
+import { getSocket } from '../utils';
+import './IncomingCallModal.css';
+
+export default function IncomingCallModal() {
+  const { incomingCall, setIncomingCall, setActiveCall, conversations } = useStore();
+  const audioRef = useRef(null);
+  const socket = getSocket();
+
+  const { callId, callType, callerId } = incomingCall || {};
+
+  // Find caller info
+  const callerUser = React.useMemo(() => {
+    for (const conv of (useStore.getState().conversations || [])) {
+      const p = conv.participants?.find(p => p._id === callerId);
+      if (p) return p;
+    }
+    return { name: 'Someone', _id: callerId };
+  }, [callerId]);
+
+  useEffect(() => {
+    // Play ringtone
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const interval = setInterval(() => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    }, 1200);
+
+    return () => {
+      clearInterval(interval);
+      ctx.close();
+    };
+  }, []);
+
+  const accept = () => {
+    socket?.emit('acceptCall', { callId, callerId });
+    setActiveCall({ callId, type: callType, remoteUser: callerUser, isInitiator: false });
+    setIncomingCall(null);
+  };
+
+  const reject = () => {
+    socket?.emit('rejectCall', { callId, callerId });
+    setIncomingCall(null);
+  };
+
+  return (
+    <div className="incoming-call-overlay">
+      <div className="incoming-card">
+        <div className="incoming-pulse" />
+        <div className="avatar avatar-lg incoming-avatar">
+          {callerUser.avatar ? <img src={callerUser.avatar} alt={callerUser.name} /> : (callerUser.name || '?')[0].toUpperCase()}
+        </div>
+        <div className="incoming-type">{callType === 'video' ? '🎥 Incoming Video Call' : '📞 Incoming Voice Call'}</div>
+        <div className="incoming-name">{callerUser.name}</div>
+        <div className="incoming-actions">
+          <button className="call-action decline" onClick={reject}>📵</button>
+          <button className="call-action accept" onClick={accept}>📞</button>
+        </div>
+      </div>
+    </div>
+  );
+}

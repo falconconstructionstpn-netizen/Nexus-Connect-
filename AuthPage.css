@@ -1,0 +1,114 @@
+import { io } from 'socket.io-client';
+
+let socket = null;
+
+export const initSocket = (token) => {
+  if (socket) socket.disconnect();
+  socket = io(process.env.REACT_APP_SERVER_URL || '', {
+    auth: { token },
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000
+  });
+  return socket;
+};
+
+export const getSocket = () => socket;
+export const disconnectSocket = () => { if (socket) socket.disconnect(); socket = null; };
+
+// API
+const BASE = process.env.REACT_APP_SERVER_URL || '';
+
+export const api = {
+  async request(method, path, body, token) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE}/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Request failed');
+    return data;
+  },
+
+  get: (path, token) => api.request('GET', path, null, token),
+  post: (path, body, token) => api.request('POST', path, body, token),
+  put: (path, body, token) => api.request('PUT', path, body, token),
+  delete: (path, token) => api.request('DELETE', path, null, token),
+
+  async upload(file, token) {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${BASE}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Upload failed');
+    return data;
+  }
+};
+
+// WebRTC ICE config
+export const getIceConfig = () => ({
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // Add TURN server from env if available
+    ...(process.env.REACT_APP_TURN_URL ? [{
+      urls: process.env.REACT_APP_TURN_URL,
+      username: process.env.REACT_APP_TURN_USERNAME,
+      credential: process.env.REACT_APP_TURN_CREDENTIAL
+    }] : [])
+  ]
+});
+
+// Mood detection from typing patterns
+export const detectMood = (typingData) => {
+  const { speed, pauses, deletions } = typingData;
+  if (speed > 80 && pauses < 2) return { mood: 'excited', color: '#FFD700', intensity: 0.8 };
+  if (speed < 20 && pauses > 5) return { mood: 'sad', color: '#6B8FD6', intensity: 0.6 };
+  if (deletions > 10) return { mood: 'anxious', color: '#FF6B6B', intensity: 0.7 };
+  if (speed > 60 && deletions < 2) return { mood: 'confident', color: '#2ED573', intensity: 0.5 };
+  return { mood: 'neutral', color: '#00F5FF', intensity: 0.3 };
+};
+
+// Ambient status inference
+export const inferAmbientStatus = () => {
+  const hour = new Date().getHours();
+  if (hour >= 22 || hour < 6) return 'resting';
+  if (hour >= 7 && hour <= 9) return 'commuting';
+  if (hour >= 9 && hour <= 17) return 'focused';
+  return 'active';
+};
+
+export const AMBIENT_STATUS_CONFIG = {
+  active: { label: 'Active', icon: '⚡', color: '#2ED573' },
+  creating: { label: 'Creating', icon: '🎨', color: '#FFD700' },
+  resting: { label: 'Resting', icon: '🌙', color: '#6B8FD6' },
+  commuting: { label: 'Commuting', icon: '🚌', color: '#FF6B6B' },
+  focused: { label: 'Focused', icon: '🎯', color: '#00F5FF' },
+  away: { label: 'Away', icon: '💭', color: '#999' }
+};
+
+export const formatTime = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+export const formatDuration = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};

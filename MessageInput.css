@@ -1,0 +1,91 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export const useStore = create(
+  persist(
+    (set, get) => ({
+      // Auth
+      user: null,
+      token: null,
+      setUser: (user) => set({ user }),
+      setToken: (token) => set({ token }),
+      logout: () => set({ user: null, token: null, activeConversation: null }),
+
+      // Conversations
+      conversations: [],
+      activeConversation: null,
+      setConversations: (conversations) => set({ conversations }),
+      setActiveConversation: (conv) => set({ activeConversation: conv }),
+      updateConversation: (conv) => set(state => ({
+        conversations: state.conversations.map(c => c._id === conv._id ? { ...c, ...conv } : c)
+      })),
+      addConversation: (conv) => set(state => ({
+        conversations: [conv, ...state.conversations.filter(c => c._id !== conv._id)]
+      })),
+
+      // Messages per conversation
+      messages: {}, // { conversationId: [...messages] }
+      setMessages: (convId, msgs) => set(state => ({
+        messages: { ...state.messages, [convId]: msgs }
+      })),
+      addMessage: (convId, msg) => set(state => ({
+        messages: {
+          ...state.messages,
+          [convId]: [...(state.messages[convId] || []), msg]
+        }
+      })),
+      updateMessage: (convId, msgId, updates) => set(state => ({
+        messages: {
+          ...state.messages,
+          [convId]: (state.messages[convId] || []).map(m => m._id === msgId ? { ...m, ...updates } : m)
+        }
+      })),
+      removeMessage: (convId, msgId) => set(state => ({
+        messages: {
+          ...state.messages,
+          [convId]: (state.messages[convId] || []).filter(m => m._id !== msgId)
+        }
+      })),
+
+      // Online users
+      onlineUsers: {}, // { userId: { status, ambientStatus, lastSeen } }
+      setUserPresence: (userId, data) => set(state => ({
+        onlineUsers: { ...state.onlineUsers, [userId]: { ...state.onlineUsers[userId], ...data } }
+      })),
+
+      // Active call
+      activeCall: null,
+      setActiveCall: (call) => set({ activeCall: call }),
+
+      // Walkie talkie
+      walkieChannel: null,
+      setWalkieChannel: (channel) => set({ walkieChannel: channel }),
+
+      // Incoming requests
+      incomingCall: null,
+      setIncomingCall: (call) => set({ incomingCall: call }),
+      incomingWalkie: null,
+      setIncomingWalkie: (req) => set({ incomingWalkie: req }),
+      incomingLocation: null,
+      setIncomingLocation: (req) => set({ incomingLocation: req }),
+      incomingCamera: null,
+      setIncomingCamera: (req) => set({ incomingCamera: req }),
+
+      // Mood/theme
+      moodColor: '#00F5FF',
+      setMoodColor: (color) => set({ moodColor: color }),
+      uiMoodIntensity: 0,
+      setUiMoodIntensity: (val) => set({ uiMoodIntensity: val }),
+
+      // UI state
+      sidebarOpen: true,
+      setSidebarOpen: (v) => set({ sidebarOpen: v }),
+      activePanel: null, // 'memoryBoard', 'liveLocation', 'liveCamera', etc
+      setActivePanel: (p) => set({ activePanel: p }),
+    }),
+    {
+      name: 'nexus-store',
+      partialize: (state) => ({ token: state.token, user: state.user })
+    }
+  )
+);

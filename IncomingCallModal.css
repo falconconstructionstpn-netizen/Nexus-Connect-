@@ -1,0 +1,121 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useStore } from '../store';
+import { getSocket } from '../utils';
+import './LiveLocationPanel.css';
+
+export default function LiveLocationPanel() {
+  const { activeConversation, user } = useStore();
+  const [sharing, setSharing] = useState(false);
+  const [remoteLocations, setRemoteLocations] = useState({});
+  const [myLocation, setMyLocation] = useState(null);
+  const mapRef = useRef(null);
+  const leafletMapRef = useRef(null);
+  const markersRef = useRef({});
+  const watchRef = useRef(null);
+  const socket = getSocket();
+
+  // Dynamically load leaflet to avoid SSR issues
+  useEffect(() => {
+    const initMap = async () => {
+      if (leafletMapRef.current) return;
+      // Leaflet is loaded via CDN in index.html
+      const L = window.L;
+      if (!L || !mapRef.current) return;
+
+      const map = L.map(mapRef.current, { zoom: 14, center: [0, 0] });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+      leafletMapRef.current = map;
+    };
+    const t = setTimeout(initMap, 300);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Socket: receive location updates
+  useEffect(() => {
+    if (!socket) return;
+    const onUpdate = ({ userId, lat, lng }) => {
+      setRemoteLocations(prev => ({ ...prev, [userId]: { lat, lng } }));
+      updateMarker(userId, lat, lng, false);
+    };
+    const onStopped = ({ userId }) => {
+      setRemoteLocations(prev => { const n = { ...prev }; delete n[userId]; return n; });
+      if (markersRef.current[userId]) {
+        markersRef.current[userId].remove();
+        delete markersRef.current[userId];
+      }
+    };
+    socket.on('locationUpdate', onUpdate);
+    socket.on('liveLocationStopped', onStopped);
+    return () => { socket.off('locationUpdate', onUpdate); socket.off('liveLocationStopped', onStopped); };
+  }, [socket]);
+
+  const updateMarker = (userId, lat, lng, isMe) => {
+    const L = window.L;
+    const map = leafletMapRef.current;
+    if (!L || !map) return;
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="map-marker ${isMe ? 'me' : 'other'}">${isMe ? '📍' : '👤'}</div>`,
+      iconSize: [36, 36]
+    });
+
+    if (markersRef.current[userId]) {
+      markersRef.current[userId].setLatLng([lat, lng]);
+    } else {
+      markersRef.current[userId] = L.marker([lat, lng], { icon }).addTo(map);
+    }
+    if (isMe) map.setView([lat, lng], 15);
+  };
+
+  const startSharing = () => {
+    if (!navigator.geolocation) return alert('Geolocation not supported');
+    setSharing(true);
+    watchRef.current = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setMyLocation({ lat, lng });
+        socket?.emit('updateLocation', { lat, lng });
+        updateMarker(user._id, lat, lng, true);
+      },
+      () => setSharing(false),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+  };
+
+  const stopSharing = () => {
+    if (watchRef.current) navigator.geolocation.clearWatch(watchRef.current);
+    setSharing(false);
+    setMyLocation(null);
+    socket?.emit('stopLiveLocation', { withUserId: 'all' });
+    if (markersRef.current[user._id]) {
+      markersRef.current[user._id].remove();
+      delete markersRef.current[user._id];
+    }
+  };
+
+  useEffect(() => () => stopSharing(), []);
+
+  return (
+    <div className="live-location-panel">
+      <div className="llp-header">
+        <span>📍 Live Location</span>
+        <div className="llp-controls">
+          {sharing ? (
+            <button className="llp-btn stop" onClick={stopSharing}>Stop Sharing</button>
+          ) : (
+            <button className="llp-btn start" onClick={startSharing}>Share My Location</button>
+          )}
+        </div>
+      </div>
+      {sharing && myLocation && (
+        <div className="llp-status">
+          🟢 Sharing live · {myLocation.lat.toFixed(4)}, {myLocation.lng.toFixed(4)}
+        </div>
+      )}
+      <div ref={mapRef} className="llp-map" />
+    </div>
+  );
+}

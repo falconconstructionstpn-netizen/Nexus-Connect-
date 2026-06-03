@@ -1,0 +1,31 @@
+import React from 'react';
+import './IncomingRequestModal.css';
+
+const CONFIG = {
+  walkie: { icon: '📻', title: 'Walkie-Talkie Request', desc: 'wants to open a walkie-talkie channel with you', acceptLabel: 'Connect', color: '#00F5FF' },
+  location: { icon: '📍', title: 'Live Location Request', desc: 'wants to see your live location', acceptLabel: 'Share', color: '#2ED573' },
+  camera: { icon: '📷', title: 'Live Camera Request', desc: 'wants to see your live camera feed', acceptLabel: 'Allow', color: '#F59E0B' }
+};
+
+export default function IncomingRequestModal({ type, data, onAccept, onDecline }) {
+  const cfg = CONFIG[type] || CONFIG.walkie;
+
+  return (
+    <div className="request-overlay">
+      <div className="request-card" style={{ '--req-color': cfg.color }}>
+        <div className="req-icon">{cfg.icon}</div>
+        <div className="req-title">{cfg.title}</div>
+        <div className="req-desc">
+          <strong>{data.fromUserId}</strong> {cfg.desc}
+        </div>
+        <div className="req-notice">Both parties must accept to enable this feature.</div>
+        <div className="req-actions">
+          <button className="req-btn decline" onClick={onDecline}>Decline</button>
+          <button className="req-btn accept" style={{ background: `${cfg.color}22`, borderColor: cfg.color, color: cfg.color }} onClick={onAccept}>
+            {cfg.acceptLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

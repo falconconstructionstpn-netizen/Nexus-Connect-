@@ -1,0 +1,42 @@
+.request-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 2500;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.request-card {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(var(--req-color-rgb, 0,245,255), 0.3);
+  border-top: 3px solid var(--req-color, var(--accent));
+  border-radius: 24px;
+  padding: 28px 24px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+  animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.req-icon { font-size: 40px; margin-bottom: 12px; }
+.req-title { font-size: 17px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+.req-desc { font-size: 14px; color: var(--text-secondary); margin-bottom: 10px; }
+.req-notice { font-size: 11px; color: var(--text-muted); margin-bottom: 20px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 8px; }
+.req-actions { display: flex; gap: 12px; }
+.req-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid transparent;
+}
+.req-btn.decline { background: rgba(255,71,87,0.1); border-color: rgba(255,71,87,0.3); color: var(--danger); }
+.req-btn.decline:hover { background: rgba(255,71,87,0.2); }
+.req-btn.accept:hover { opacity: 0.85; }

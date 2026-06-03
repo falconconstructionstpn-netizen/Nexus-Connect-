@@ -1,0 +1,63 @@
+.live-location-panel {
+  width: 340px;
+  min-width: 340px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.llp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.llp-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid;
+}
+.llp-btn.start {
+  background: rgba(46,213,115,0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+.llp-btn.stop {
+  background: rgba(255,71,87,0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.llp-status {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--success);
+  background: rgba(46,213,115,0.05);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.llp-map {
+  flex: 1;
+  min-height: 300px;
+  filter: invert(0.9) hue-rotate(180deg);
+}
+
+.map-marker {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}

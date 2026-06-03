@@ -1,0 +1,200 @@
+import React, { useState } from 'react';
+import { useStore } from '../store';
+import { getSocket, formatTime } from '../utils';
+import './MessageBubble.css';
+
+const COMMON_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
+
+export default function MessageBubble({ message, isOwn, onReply }) {
+  const { user, activeConversation } = useStore();
+  const [showActions, setShowActions] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [comprehensionInput, setComprehensionInput] = useState('');
+  const socket = getSocket();
+
+  const handleSilentReact = (emoji) => {
+    socket.emit('silentReact', {
+      messageId: message._id,
+      conversationId: activeConversation._id,
+      emoji
+    });
+    setShowEmojiPicker(false);
+  };
+
+  const handleComprehensionTap = () => {
+    socket.emit('comprehensionTap', {
+      messageId: message._id,
+      conversationId: activeConversation._id,
+      keyword: comprehensionInput
+    });
+    setComprehensionInput('');
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Delete this message?')) {
+      socket.emit('deleteMessage', { messageId: message._id, conversationId: activeConversation._id });
+    }
+    setShowActions(false);
+  };
+
+  // Time capsule locked state
+  if (message.isLocked) {
+    const unlock = new Date(message.unlockAt);
+    return (
+      <div className={`bubble-wrap ${isOwn ? 'own' : 'other'}`}>
+        <div className="bubble time-capsule-locked">
+          <div className="tc-icon">⏰</div>
+          <div>
+            <div className="tc-label">Time Capsule</div>
+            <div className="tc-date">Unlocks {unlock.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Deleted message
+  if (message.deleted) {
+    return (
+      <div className={`bubble-wrap ${isOwn ? 'own' : 'other'}`}>
+        <div className="bubble deleted-bubble">🚫 Message deleted</div>
+      </div>
+    );
+  }
+
+  const renderContent = () => {
+    switch (message.type) {
+      case 'image':
+        return (
+          <div className="media-message">
+            <img src={message.mediaUrl} alt="Image" className="msg-image" onClick={() => window.open(message.mediaUrl, '_blank')} />
+            {message.content && <p className="media-caption">{message.content}</p>}
+          </div>
+        );
+      case 'video':
+        return <video src={message.mediaUrl} controls className="msg-video" />;
+      case 'voiceNote':
+        return (
+          <div className="voice-note">
+            <span className="vn-icon">🎙</span>
+            <div className="vn-waveform">
+              {Array.from({ length: 20 }).map((_, i) => (
+                <div key={i} className="vn-bar" style={{ height: `${Math.random() * 20 + 6}px` }} />
+              ))}
+            </div>
+            <span className="vn-duration">{message.voiceDuration ? `${Math.floor(message.voiceDuration / 60)}:${String(Math.floor(message.voiceDuration % 60)).padStart(2, '0')}` : '0:00'}</span>
+          </div>
+        );
+      case 'location':
+        return (
+          <div className="location-message">
+            <span>📍</span>
+            <a href={`https://maps.google.com/?q=${message.location?.lat},${message.location?.lng}`} target="_blank" rel="noreferrer">
+              View Location
+            </a>
+          </div>
+        );
+      case 'system':
+        return <div className="system-message">{message.content}</div>;
+      default:
+        return (
+          <p className="msg-text">
+            {message.isTimeCapsule && !message.isLocked && <span className="tc-badge">⏰ </span>}
+            {message.content}
+          </p>
+        );
+    }
+  };
+
+  const myReactions = (message.silentReactions || []).filter(r => r.users?.includes(user?._id));
+
+  return (
+    <div className={`bubble-wrap ${isOwn ? 'own' : 'other'} ${message.disappearAfterRead && !message.readAndUnderstood ? 'disappearing' : ''}`}
+         onMouseEnter={() => setShowActions(true)}
+         onMouseLeave={() => { setShowActions(false); setShowEmojiPicker(false); }}>
+
+      {/* Avatar for others */}
+      {!isOwn && (
+        <div className="avatar avatar-sm bubble-avatar">
+          {message.sender?.avatar ? <img src={message.sender.avatar} alt={message.sender.name} /> : (message.sender?.name || '?')[0].toUpperCase()}
+        </div>
+      )}
+
+      <div className="bubble-col">
+        {/* Sender name in groups */}
+        {!isOwn && activeConversation?.type === 'group' && (
+          <span className="bubble-sender">{message.sender?.name}</span>
+        )}
+
+        {/* Reply preview */}
+        {message.replyTo && (
+          <div className="reply-preview">
+            <span className="reply-bar" />
+            <span className="reply-text">{message.replyTo.content || '📎 Media'}</span>
+          </div>
+        )}
+
+        <div className={`bubble ${isOwn ? 'bubble-own' : 'bubble-other'} ${message.type === 'image' ? 'bubble-media' : ''}`}>
+          {renderContent()}
+
+          <div className="bubble-footer">
+            {message.disappearAfterRead && !message.readAndUnderstood && (
+              <span className="disappear-icon" title="Disappears after understood">🔮</span>
+            )}
+            {message.edited && <span className="edited-label">edited</span>}
+            <span className="bubble-time">{formatTime(message.createdAt)}</span>
+            {isOwn && (
+              <span className={`read-receipt ${message.readBy?.length > 0 ? 'read' : ''}`}>
+                {message.readBy?.length > 0 ? '✓✓' : '✓'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Silent reactions display */}
+        {(message.silentReactions || []).filter(r => r.count > 0).length > 0 && (
+          <div className="reactions-row">
+            {message.silentReactions.filter(r => r.count > 0).map(r => (
+              <span key={r.emoji} className="reaction-chip">
+                {r.emoji} <span className="reaction-count">{r.count}</span>
+                {r.revealed && <span className="reaction-revealed">👁</span>}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Comprehension tap */}
+        {message.disappearAfterRead && !isOwn && !message.readAndUnderstood && (
+          <div className="comprehension-wrap">
+            <input
+              type="text"
+              placeholder={`Type "${message.comprehensionWord || 'got it'}" to confirm`}
+              value={comprehensionInput}
+              onChange={e => setComprehensionInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleComprehensionTap()}
+              className="comprehension-input"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Action bar */}
+      {showActions && (
+        <div className={`action-bar ${isOwn ? 'own' : 'other'}`}>
+          <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Silent react">🤫</button>
+          <button onClick={onReply} title="Reply">↩</button>
+          {isOwn && <button onClick={handleDelete} title="Delete">🗑</button>}
+        </div>
+      )}
+
+      {/* Silent emoji picker */}
+      {showEmojiPicker && (
+        <div className={`emoji-quick ${isOwn ? 'own' : 'other'}`}>
+          {COMMON_EMOJIS.map(e => (
+            <button key={e} onClick={() => handleSilentReact(e)}>{e}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,212 @@
+import React, { useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
+import { useStore } from '../store';
+import { getSocket, api, inferAmbientStatus } from '../utils';
+import Sidebar from '../components/Sidebar';
+import ChatArea from '../components/ChatArea';
+import IncomingCallModal from '../components/IncomingCallModal';
+import ActiveCallScreen from '../components/ActiveCallScreen';
+import WalkieTalkieOverlay from '../components/WalkieTalkieOverlay';
+import IncomingRequestModal from '../components/IncomingRequestModal';
+import './ChatApp.css';
+
+export default function ChatApp() {
+  const {
+    user, token,
+    setConversations, addConversation, addMessage, updateMessage, removeMessage,
+    setUserPresence, activeConversation,
+    setIncomingCall, incomingCall, activeCall, setActiveCall,
+    setIncomingWalkie, incomingWalkie, walkieChannel, setWalkieChannel,
+    setIncomingLocation, incomingLocation,
+    setIncomingCamera, incomingCamera,
+    setMoodColor
+  } = useStore();
+
+  const ambientIntervalRef = useRef(null);
+
+  // Load conversations on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.get('/messages/conversations', token);
+        setConversations(data.conversations);
+      } catch (e) {}
+    };
+    load();
+  }, [token]);
+
+  // Auto-detect ambient status
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    ambientIntervalRef.current = setInterval(() => {
+      const status = inferAmbientStatus();
+      socket.emit('ambientStatus', { status });
+    }, 5 * 60 * 1000); // Every 5 min
+
+    return () => clearInterval(ambientIntervalRef.current);
+  }, []);
+
+  // Socket event handlers
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handlers = {
+      newMessage: (msg) => {
+        const convId = msg.conversation;
+        addMessage(convId, msg);
+        // Update conversation last message
+        const { conversations, setConversations: sc, conversations: convs } = useStore.getState();
+        const updated = convs.map(c => c._id === convId ? { ...c, lastMessage: msg, lastActivity: new Date() } : c);
+        sc(updated.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity)));
+      },
+      messageDeleted: ({ messageId }) => {
+        const { activeConversation: ac, updateMessage: um } = useStore.getState();
+        if (ac) um(ac._id, messageId, { deleted: true, content: 'This message was deleted' });
+      },
+      messageEdited: ({ messageId, content }) => {
+        const { activeConversation: ac, updateMessage: um } = useStore.getState();
+        if (ac) um(ac._id, messageId, { content, edited: true });
+      },
+      messageUnderstood: ({ messageId }) => {
+        const { activeConversation: ac, updateMessage: um } = useStore.getState();
+        if (ac) um(ac._id, messageId, { readAndUnderstood: true });
+      },
+      timeCapsuleUnlocked: ({ messageId }) => {
+        const { activeConversation: ac, updateMessage: um } = useStore.getState();
+        if (ac) um(ac._id, messageId, { isLocked: false });
+        toast('⏰ A time capsule message has been unlocked!');
+      },
+      userPresence: ({ userId, status, ambientStatus, lastSeen }) => {
+        setUserPresence(userId, { status, ambientStatus, lastSeen });
+      },
+      ambientStatusUpdate: ({ userId, status }) => {
+        setUserPresence(userId, { ambientStatus: status });
+      },
+
+      // Incoming call
+      incomingCall: (data) => {
+        setIncomingCall(data);
+        toast('📞 Incoming call...', { duration: 30000 });
+      },
+      callEnded: () => {
+        setActiveCall(null);
+        setIncomingCall(null);
+        toast('Call ended');
+      },
+      callRejected: () => {
+        setActiveCall(null);
+        toast('Call declined');
+      },
+
+      // Walkie talkie
+      walkieTalkieRequest: (data) => {
+        setIncomingWalkie(data);
+        toast('📻 Walkie-Talkie request!', { duration: 30000 });
+      },
+      walkieTalkieReady: (data) => {
+        setWalkieChannel(data);
+        setIncomingWalkie(null);
+        toast.success('📻 Walkie-Talkie connected!');
+      },
+      walkieTalkieDeclined: () => {
+        setIncomingWalkie(null);
+        toast('Walkie-Talkie request declined');
+      },
+      walkieEnded: () => {
+        setWalkieChannel(null);
+        toast('Walkie-Talkie disconnected');
+      },
+
+      // Live location
+      liveLocationRequest: (data) => {
+        setIncomingLocation(data);
+        toast('📍 Live location request!', { duration: 30000 });
+      },
+      liveLocationAccepted: ({ byUserId }) => {
+        toast.success('📍 Live location sharing started!');
+      },
+
+      // Live camera
+      liveCameraRequest: (data) => {
+        setIncomingCamera(data);
+        toast('📷 Live camera request!', { duration: 30000 });
+      },
+      liveCameraAccepted: ({ byUserId }) => {
+        toast.success('📷 Live camera access granted!');
+      },
+
+      // Silent reactions
+      silentReactionUpdate: ({ messageId, emoji, count, users, revealed }) => {
+        const { activeConversation: ac, messages } = useStore.getState();
+        if (ac) {
+          const msgs = messages[ac._id] || [];
+          const msg = msgs.find(m => m._id === messageId);
+          if (msg) {
+            const reactions = msg.silentReactions || [];
+            const updated = reactions.map(r => r.emoji === emoji
+              ? { ...r, count, users: revealed ? users : r.users }
+              : r
+            );
+            useStore.getState().updateMessage(ac._id, messageId, { silentReactions: updated });
+          }
+          if (revealed) toast(`🎉 ${count} people reacted with ${emoji}!`);
+        }
+      }
+    };
+
+    Object.entries(handlers).forEach(([event, handler]) => socket.on(event, handler));
+    return () => Object.entries(handlers).forEach(([event, handler]) => socket.off(event, handler));
+  }, []);
+
+  return (
+    <div className="chat-app">
+      <Sidebar />
+      <ChatArea />
+
+      {/* Global overlays */}
+      {incomingCall && !activeCall && <IncomingCallModal />}
+      {activeCall && <ActiveCallScreen />}
+      {walkieChannel && <WalkieTalkieOverlay />}
+
+      {incomingWalkie && (
+        <IncomingRequestModal
+          type="walkie"
+          data={incomingWalkie}
+          onAccept={() => {
+            getSocket().emit('walkieTalkieAccept', { fromUserId: incomingWalkie.fromUserId });
+            setIncomingWalkie(null);
+          }}
+          onDecline={() => {
+            getSocket().emit('walkieTalkieDecline', { fromUserId: incomingWalkie.fromUserId });
+            setIncomingWalkie(null);
+          }}
+        />
+      )}
+      {incomingLocation && (
+        <IncomingRequestModal
+          type="location"
+          data={incomingLocation}
+          onAccept={() => {
+            getSocket().emit('acceptLiveLocation', { requesterId: incomingLocation.fromUserId });
+            setIncomingLocation(null);
+          }}
+          onDecline={() => setIncomingLocation(null)}
+        />
+      )}
+      {incomingCamera && (
+        <IncomingRequestModal
+          type="camera"
+          data={incomingCamera}
+          onAccept={() => {
+            getSocket().emit('acceptLiveCamera', { requesterId: incomingCamera.fromUserId });
+            setIncomingCamera(null);
+          }}
+          onDecline={() => setIncomingCamera(null)}
+        />
+      )}
+    </div>
+  );
+}

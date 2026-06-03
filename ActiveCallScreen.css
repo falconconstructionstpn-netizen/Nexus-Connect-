@@ -1,0 +1,77 @@
+import React, { useState } from 'react';
+import toast from 'react-hot-toast';
+import { useStore } from '../store';
+import { getSocket } from '../utils';
+import './TimeCapsuleModal.css';
+
+export default function TimeCapsuleModal({ onClose }) {
+  const { activeConversation } = useStore();
+  const [message, setMessage] = useState('');
+  const [unlockAt, setUnlockAt] = useState('');
+  const [withComprehension, setWithComprehension] = useState(false);
+  const [comprehensionWord, setComprehensionWord] = useState('');
+  const socket = getSocket();
+
+  const send = () => {
+    if (!message.trim() || !unlockAt) return toast.error('Fill in all fields');
+    socket?.emit('sendMessage', {
+      conversationId: activeConversation._id,
+      content: message.trim(),
+      type: 'text',
+      isTimeCapsule: true,
+      unlockAt,
+      disappearAfterRead: withComprehension,
+      comprehensionWord: withComprehension ? comprehensionWord : ''
+    });
+    toast.success('⏰ Time capsule sent!');
+    onClose();
+  };
+
+  // Min datetime is 1 hour from now
+  const minDate = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="tc-modal" onClick={e => e.stopPropagation()}>
+        <div className="tc-modal-header">
+          <span>⏰</span>
+          <h2>Time Capsule</h2>
+          <button onClick={onClose}>✕</button>
+        </div>
+        <p className="tc-modal-desc">Send a message that will only unlock at a future date you choose.</p>
+
+        <div className="tc-field">
+          <label>Message</label>
+          <textarea
+            rows={4}
+            placeholder="Write your message..."
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+          />
+        </div>
+
+        <div className="tc-field">
+          <label>Unlock Date & Time</label>
+          <input type="datetime-local" min={minDate} value={unlockAt} onChange={e => setUnlockAt(e.target.value)} />
+        </div>
+
+        <div className="tc-toggle" onClick={() => setWithComprehension(!withComprehension)}>
+          <div className={`toggle ${withComprehension ? 'on' : ''}`} />
+          <span>Disappear after comprehension tap</span>
+        </div>
+
+        {withComprehension && (
+          <div className="tc-field">
+            <label>Comprehension keyword (recipient must type this)</label>
+            <input type="text" placeholder="e.g. understood / 💯" value={comprehensionWord} onChange={e => setComprehensionWord(e.target.value)} />
+          </div>
+        )}
+
+        <div className="tc-actions">
+          <button className="tc-cancel" onClick={onClose}>Cancel</button>
+          <button className="tc-send" onClick={send}>Send Capsule ⏰</button>
+        </div>
+      </div>
+    </div>
+  );
+}
